@@ -43,10 +43,10 @@ const fmt   = (n) => n != null && n !== "" ? `$${Number(n).toLocaleString("en-US
 const today = () => new Date().toISOString().slice(0,10);
 
 const toEntry  = r => ({ id:r.id, officeId:r.office_id, componentNo:r.component_no, componentName:r.component_name, country:r.country, state:r.state, city:r.city, zip:r.zip, unit:r.unit, laborCost:r.labor_cost, materialCost:r.material_cost, totalCost:r.total_cost, notes:r.notes??'', submittedBy:r.submitted_by??'', updatedAt:r.updated_at });
-const toUser   = r => ({ id:r.id, name:r.name, email:r.email, title:r.title??'', password:r.password, officeId:r.office_id, role:r.role });
+const toUser   = r => ({ id:r.id, name:r.name, firstName:r.first_name??'', lastName:r.last_name??'', email:r.email, title:r.title??'', password:r.password, officeId:r.office_id, role:r.role });
 const toOffice = r => ({ id:r.id, name:r.name });
 const fromEntry = (f,userName) => ({ office_id:f.officeId, component_no:f.componentNo, component_name:f.componentName, country:f.country, state:f.state, city:f.city, zip:f.zip, unit:f.unit, labor_cost:f.laborCost||null, material_cost:f.materialCost||null, total_cost:f.totalCost||null, notes:f.notes||'', submitted_by:userName, updated_at:today() });
-const fromUser  = (f) => ({ name:f.name, email:f.email, title:f.title||'', password:f.password, office_id:f.officeId, role:f.role });
+const fromUser  = (f) => ({ name:(f.firstName+' '+f.lastName).trim(), first_name:f.firstName||'', last_name:f.lastName||'', email:f.email, title:f.title||'', password:f.password, office_id:f.officeId, role:f.role });
 
 function exportCSV(rows, offices) {
   const headers = ["Component #","Component Name","Country","State","City","ZIP","Unit","Labor","Material","Total","Notes","Office","Updated"];
@@ -85,7 +85,7 @@ const fmtCurrency = (val) => {
   if (isNaN(n)) return "";
   return n.toFixed(2);
 };
-const blankUser   = (officeId) => ({ name:"",email:"",title:"",password:"",officeId,role:"editor" });
+const blankUser   = (officeId) => ({ firstName:"",lastName:"",name:"",email:"",title:"",password:"",officeId,role:"editor" });
 const blankOffice = ()         => ({ name:"" });
 
 // ── ROOT ───────────────────────────────────────────────────────────────────────
@@ -101,6 +101,9 @@ export default function App() {
   const [fState,  setFState]  = useState("");
   const [fOffice, setFOffice] = useState("");
   const [toast,   setToast]   = useState(null);
+  const [entrySort,  setEntrySort]  = useState({col:"componentNo",dir:"asc"});
+  const [userSort,   setUserSort]   = useState({col:"lastName",dir:"asc"});
+  const [userSearch, setUserSearch] = useState("");
 
   const showToast  = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3200); };
   const closeModal = () => setModal(null);
@@ -148,6 +151,41 @@ export default function App() {
     }
     return rows;
   },[entries,search,fState,fOffice]);
+
+  const sortedEntries = useMemo(()=>{
+    const {col,dir} = entrySort;
+    return [...visibleEntries].sort((a,b)=>{
+      let av=a[col]??'', bv=b[col]??'';
+      if(['laborCost','materialCost','totalCost'].includes(col)){ av=parseFloat(av)||0; bv=parseFloat(bv)||0; }
+      else { av=String(av).toLowerCase(); bv=String(bv).toLowerCase(); }
+      if(av<bv) return dir==='asc'?-1:1;
+      if(av>bv) return dir==='asc'?1:-1;
+      return 0;
+    });
+  },[visibleEntries,entrySort]);
+
+  const sortedUsers = useMemo(()=>{
+    const {col,dir} = userSort;
+    let rows = users.filter(u=>isAdmin||u.officeId===me?.officeId);
+    if(userSearch.trim()){
+      const q=userSearch.toLowerCase();
+      rows=rows.filter(u=>
+        u.firstName.toLowerCase().includes(q)||
+        u.lastName.toLowerCase().includes(q)||
+        u.email.toLowerCase().includes(q)||
+        (u.title||'').toLowerCase().includes(q)||
+        u.role.toLowerCase().includes(q)||
+        (offices.find(o=>o.id===u.officeId)?.name||'').toLowerCase().includes(q)
+      );
+    }
+    return rows.sort((a,b)=>{
+      let av=a[col]??'', bv=b[col]??'';
+      av=String(av).toLowerCase(); bv=String(bv).toLowerCase();
+      if(av<bv) return dir==='asc'?-1:1;
+      if(av>bv) return dir==='asc'?1:-1;
+      return 0;
+    });
+  },[users,userSort,userSearch,isAdmin,me,offices]);
 
   // ── COST ENTRY ACTIONS ───────────────────────────────────────────────────────
   const saveEntry = async (form,editId) => {
@@ -204,8 +242,8 @@ export default function App() {
 
   // ── USER ACTIONS ─────────────────────────────────────────────────────────────
   const saveUser = async (form,editId) => {
-    if (!form.name?.trim()||!form.email?.trim()||!form.password?.trim()) {
-      showToast("Name, email, and password are required.","error"); return false;
+    if (!form.firstName?.trim()||!form.lastName?.trim()||!form.email?.trim()||!form.password?.trim()) {
+      showToast("First name, last name, email, and password are required.","error"); return false;
     }
     try {
       if (editId) {
@@ -260,7 +298,8 @@ export default function App() {
             <button style={S.btnOutline} onClick={()=>exportCSV(visibleEntries,offices)}>⬇ Export CSV</button>
             <button style={S.btnPrimary} onClick={()=>setModal({type:"entry",data:blankEntry(me.officeId,me.name),editId:null})}>+ Add Entry</button>
           </div>
-          <CostTable entries={visibleEntries} offices={offices} me={me}
+          <CostTable entries={sortedEntries} offices={offices} me={me}
+            sort={entrySort} onSort={setEntrySort}
             canEdit={canEditEntry}
             onEdit={e=>setModal({type:"entry",data:{...e},editId:e.id})}
             onView={e=>setModal({type:"entryDetail",data:e})} />
@@ -312,20 +351,29 @@ export default function App() {
             </div>
             <button style={S.btnPrimary} onClick={()=>setModal({type:"user",data:blankUser(me.officeId),editId:null})}>+ New User</button>
           </div>
+          <div style={S.toolbar}>
+            <input style={S.searchInput} placeholder="🔍  Search name, email, role, office…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} />
+          </div>
           <div style={S.tableWrap}>
             <table style={S.table}>
               <thead><tr style={S.thead}>
-                {["Name","Email","Job Title","Role","Office","Password",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+                {[["firstName","First Name"],["lastName","Last Name"],["email","Email"],["title","Job Title"],["role","Role"],["officeId","Office"],["","Password"],["",""]].map(([col,label])=>(
+                  <th key={label} style={{...S.th,...(col?{cursor:"pointer",userSelect:"none"}:{})}}
+                    onClick={()=>col&&setUserSort(s=>({col,dir:s.col===col&&s.dir==="asc"?"desc":"asc"}))}>
+                    {label}{col&&userSort.col===col?(userSort.dir==="asc"?" ▲":" ▼"):""}
+                  </th>
+                ))}
               </tr></thead>
               <tbody>
-                {users.filter(u=>isAdmin||u.officeId===me.officeId).map(u=>{
+                {sortedUsers.map(u=>{
                   const uOffice  = offices.find(o=>o.id===u.officeId);
                   const editable = canManageUser(u);
                   return (
                     <tr key={u.id} style={S.tr}
                       onMouseEnter={e=>e.currentTarget.style.background="#f0f7ff"}
                       onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
-                      <td style={S.td}><strong>{u.name}</strong>{u.id===session&&<span style={S.youBadge}> you</span>}</td>
+                      <td style={S.td}>{u.firstName||u.name.split(' ')[0]}</td>
+                      <td style={S.td}><strong>{u.lastName||u.name.split(' ').slice(1).join(' ')}</strong>{u.id===session&&<span style={S.youBadge}> you</span>}</td>
                       <td style={S.td}>{u.email}</td>
                       <td style={S.td}>{u.title||"—"}</td>
                       <td style={S.tdCenter}><RoleBadge role={u.role}/></td>
@@ -438,13 +486,25 @@ function Topbar({ me, myOffice, isMgr, page, setPage, onLogout }) {
 }
 
 // ── COST TABLE ─────────────────────────────────────────────────────────────────
-function CostTable({ entries, offices, me, canEdit, onEdit, onView }) {
+function CostTable({ entries, offices, me, canEdit, onEdit, onView, sort, onSort }) {
   if (!entries.length) return <div style={S.empty}>No entries match your search.</div>;
+  const cols = [
+    ["componentNo","Comp #"],["componentName","Component Name"],["state","State"],
+    ["city","City"],["zip","ZIP"],["unit","Unit"],
+    ["laborCost","Labor"],["materialCost","Material"],["totalCost","Total"],
+    ["officeId","Office"],["",""]
+  ];
+  const SortHdr = ({col,label}) => (
+    <th style={{...S.th,...(col?{cursor:"pointer",userSelect:"none"}:{})}}
+      onClick={()=>col&&onSort(s=>({col,dir:s.col===col&&s.dir==="asc"?"desc":"asc"}))}>
+      {label}{col&&sort.col===col?(sort.dir==="asc"?" ▲":" ▼"):""}
+    </th>
+  );
   return (
     <div style={S.tableWrap}>
       <table style={S.table}>
         <thead><tr style={S.thead}>
-          {["Comp #","Component Name","State","City","ZIP","Unit","Labor","Material","Total","Office",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+          {cols.map(([col,label])=><SortHdr key={label} col={col} label={label}/>)}
         </tr></thead>
         <tbody>
           {entries.map(e=>{

@@ -740,8 +740,9 @@ function UserModal({ form:init, editId, offices, me, isAdmin, onSave, onClose })
   return (
     <Modal title={editId?"Edit User":"New User"} onClose={onClose}>
       <div style={S.formGrid}>
-        <FF label="Full Name*" value={form.name}  onChange={v=>setForm(p=>({...p,name:v}))}  span={3}/>
-        <FF label="Email*"     value={form.email} onChange={v=>setForm(p=>({...p,email:v}))} span={3}/>
+        <FF label="First Name*" value={form.firstName} onChange={v=>setForm(p=>({...p,firstName:v}))} span={1}/>
+        <FF label="Last Name*"  value={form.lastName}  onChange={v=>setForm(p=>({...p,lastName:v}))}  span={2}/>
+        <FF label="Email*"      value={form.email}     onChange={v=>setForm(p=>({...p,email:v}))}     span={3}/>
         <FF label="Job Title"  value={form.title} onChange={v=>setForm(p=>({...p,title:v}))} span={3}/>
         <div style={{...S.field,gridColumn:"span 3"}}>
           <label style={S.label}>Password*</label>

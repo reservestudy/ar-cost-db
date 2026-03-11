@@ -814,16 +814,18 @@ function ImportModal({ file, offices, me, onImport, onClose }) {
   const [loading, setLoading] = React.useState(true);
   const [saving,  setSaving]  = React.useState(false);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const parseFileRef = React.useRef(null);
+
   React.useEffect(()=>{
     const script = document.createElement("script");
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    script.onload = () => parseFile(); // eslint-disable-line react-hooks/exhaustive-deps
+    script.onload = () => { if(parseFileRef.current) parseFileRef.current(); };
     document.head.appendChild(script);
-    return () => document.head.removeChild(script);
+    return () => { if(document.head.contains(script)) document.head.removeChild(script); };
   },[]);
 
   const parseFile = () => {
+    parseFileRef.current = parseFile;
     const reader = new FileReader();
     reader.onload = (e) => {
       try {

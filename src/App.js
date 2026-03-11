@@ -740,15 +740,15 @@ function UserModal({ form:init, editId, offices, me, isAdmin, onSave, onClose })
   return (
     <Modal title={editId?"Edit User":"New User"} onClose={onClose}>
       <div style={S.formGrid}>
-        <FF label="First Name*" value={form.firstName} onChange={v=>setForm(p=>({...p,firstName:v}))} span={1}/>
-        <FF label="Last Name*"  value={form.lastName}  onChange={v=>setForm(p=>({...p,lastName:v}))}  span={2}/>
-        <FF label="Email*"      value={form.email}     onChange={v=>setForm(p=>({...p,email:v}))}     span={3}/>
-        <FF label="Job Title"  value={form.title} onChange={v=>setForm(p=>({...p,title:v}))} span={3}/>
+        <FF label="First Name*" value={form.firstName} onChange={v=>setForm(p=>({...p,firstName:v}))} span={1} autoComplete="off"/>
+        <FF label="Last Name*"  value={form.lastName}  onChange={v=>setForm(p=>({...p,lastName:v}))}  span={2} autoComplete="off"/>
+        <FF label="Email*"      value={form.email}     onChange={v=>setForm(p=>({...p,email:v}))}     span={3} autoComplete="off"/>
+        <FF label="Job Title"  value={form.title} onChange={v=>setForm(p=>({...p,title:v}))} span={3} autoComplete="off"/>
         <div style={{...S.field,gridColumn:"span 3"}}>
           <label style={S.label}>Password*</label>
           <div style={{position:"relative"}}>
             <input style={{...S.input,paddingRight:52}} type={showPw?"text":"password"}
-              value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder="Set a password…"/>
+              value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder="Set a password…" autoComplete="new-password"/>
             <button onClick={()=>setShowPw(p=>!p)}
               style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#666",fontSize:13}}>
               {showPw?"Hide":"Show"}
@@ -778,7 +778,7 @@ function UserModal({ form:init, editId, offices, me, isAdmin, onSave, onClose })
 }
 
 // ── MICRO COMPONENTS ──────────────────────────────────────────────────────────
-function FF({ label, value, onChange, type="text", span }) {
+function FF({ label, value, onChange, type="text", span, autoComplete }) {
   return (
     <div style={{...S.field,...(span?{gridColumn:`span ${span}`}:{})}}>
       <label style={S.label}>{label}</label>

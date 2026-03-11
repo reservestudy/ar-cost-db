@@ -42,16 +42,16 @@ const ROLES     = ["editor","manager","admin"];
 const fmt   = (n) => n != null && n !== "" ? `$${Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—";
 const today = () => new Date().toISOString().slice(0,10);
 
-const toEntry  = r => ({ id:r.id, officeId:r.office_id, componentNo:r.component_no, componentName:r.component_name, country:r.country, state:r.state, city:r.city, zip:r.zip, unit:r.unit, laborCost:r.labor_cost, materialCost:r.material_cost, totalCost:r.total_cost, notes:r.notes??'', submittedBy:r.submitted_by??'', updatedAt:r.updated_at });
+const toEntry  = r => ({ id:r.id, officeId:r.office_id, componentName:r.component_name, country:r.country, state:r.state, city:r.city, zip:r.zip, quantity:r.quantity??'', unit:r.unit, totalCost:r.total_cost, unitCost:r.unit_cost??'', notes:r.notes??'', submittedBy:r.submitted_by??'', updatedAt:r.updated_at??'' });
 const toUser   = r => ({ id:r.id, name:r.name, firstName:r.first_name??'', lastName:r.last_name??'', email:r.email, title:r.title??'', password:r.password, officeId:r.office_id, role:r.role });
 const toOffice = r => ({ id:r.id, name:r.name });
-const fromEntry = (f,userName) => ({ office_id:f.officeId, component_no:f.componentNo, component_name:f.componentName, country:f.country, state:f.state, city:f.city, zip:f.zip, unit:f.unit, labor_cost:f.laborCost||null, material_cost:f.materialCost||null, total_cost:f.totalCost||null, notes:f.notes||'', submitted_by:userName, updated_at:today() });
+const fromEntry = (f,userName) => ({ office_id:f.officeId, component_name:f.componentName, country:f.country, state:f.state, city:f.city, zip:f.zip, quantity:f.quantity||null, unit:f.unit, total_cost:f.totalCost||null, unit_cost:f.unitCost||null, notes:f.notes||'', submitted_by:userName, updated_at:today() });
 const fromUser  = (f) => ({ name:(f.firstName+' '+f.lastName).trim(), first_name:f.firstName||'', last_name:f.lastName||'', email:f.email, title:f.title||'', password:f.password, office_id:f.officeId, role:f.role });
 
 function exportCSV(rows, offices) {
-  const headers = ["Component #","Component Name","Country","State","City","ZIP","Unit","Labor","Material","Total","Notes","Office","Updated"];
+  const headers = ["Component Name","Country","State","City","ZIP","Quantity","Unit","Total Cost","Unit Cost","Notes","Office","Date"];
   const lines = rows.map(r=>[
-    r.componentNo,r.componentName,r.country,r.state,r.city,r.zip,
+    r.componentName,r.country,r.state,r.city,r.zip,
     r.unit,r.laborCost,r.materialCost,r.totalCost,r.notes,
     offices.find(o=>o.id===r.officeId)?.name??r.officeId, r.updatedAt
   ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
@@ -62,21 +62,23 @@ function exportCSV(rows, offices) {
   a.click();
 }
 
-const blankEntry  = (officeId, userName="") => ({ componentNo:"",componentName:"",country:"USA",state:"",city:"",zip:"",unit:"EA",laborCost:"",materialCost:"",totalCost:"",notes:"",officeId,submittedBy:userName });
+const blankEntry  = (officeId, userName="") => ({ componentName:"",country:"USA",state:"",city:"",zip:"",quantity:"",unit:"EA",totalCost:"",unitCost:"",notes:"",officeId,submittedBy:userName });
 
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 const validateEntry = (form) => {
   const errs = {};
-  if (!form.componentNo?.trim()) errs.componentNo = "Required.";
-  else if (!/^[a-zA-Z0-9\-_ ]+$/.test(form.componentNo.trim())) errs.componentNo = "No special characters.";
   if (!form.componentName?.trim()) errs.componentName = "Required.";
   if (!form.state) errs.state = "Required.";
   if (!form.city?.trim()) errs.city = "Required.";
   if (!form.zip?.trim()) errs.zip = "Required.";
   else if (!/^\d{5}$/.test(form.zip.trim())) errs.zip = "Must be 5 digits.";
   if (!form.unit) errs.unit = "Required.";
-  if (form.laborCost !== "" && form.laborCost !== null && isNaN(parseFloat(form.laborCost))) errs.laborCost = "Must be a number.";
-  if (form.materialCost !== "" && form.materialCost !== null && isNaN(parseFloat(form.materialCost))) errs.materialCost = "Must be a number.";
+  if (!form.totalCost && form.totalCost !== 0) errs.totalCost = "Required.";
+  else if (isNaN(parseFloat(form.totalCost))) errs.totalCost = "Must be a number.";
+  if (!form.quantity && form.quantity !== 0) errs.quantity = "Required.";
+  else if (!/^\d+$/.test(String(form.quantity).trim())) errs.quantity = "Must be a whole number.";
+  else if (parseInt(form.quantity) <= 0) errs.quantity = "Must be greater than zero.";
+  else if (String(parseInt(form.quantity)).length >= 7) errs.quantity = "Must be less than 7 digits.";
   return errs;
 };
 
@@ -101,7 +103,7 @@ export default function App() {
   const [fState,  setFState]  = useState("");
   const [fOffice, setFOffice] = useState("");
   const [toast,   setToast]   = useState(null);
-  const [entrySort,  setEntrySort]  = useState({col:"componentNo",dir:"asc"});
+  const [entrySort,  setEntrySort]  = useState({col:"componentName",dir:"asc"});
   const [userSort,   setUserSort]   = useState({col:"lastName",dir:"asc"});
   const [userSearch, setUserSearch] = useState("");
 
@@ -114,7 +116,7 @@ export default function App() {
       const [off,usr,ent] = await Promise.all([
         db.get("offices","?order=name"),
         db.get("users","?order=name"),
-        db.get("entries","?order=component_no"),
+        db.get("entries","?order=component_name"),
       ]);
       setOffices(off.map(toOffice));
       setUsers(usr.map(toUser));
@@ -142,7 +144,6 @@ export default function App() {
     if (search.trim()) {
       const q=search.toLowerCase();
       rows=rows.filter(r=>
-        r.componentNo.toLowerCase().includes(q)||
         r.componentName.toLowerCase().includes(q)||
         r.city.toLowerCase().includes(q)||
         r.zip.includes(q)||
@@ -293,9 +294,13 @@ export default function App() {
             </select>
             <select style={S.filterSel} value={fOffice} onChange={e=>setFOffice(e.target.value)}>
               <option value="">All Offices</option>
-              {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+              {[...offices].sort((a,b)=>a.name.localeCompare(b.name)).map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
             <button style={S.btnOutline} onClick={()=>exportCSV(visibleEntries,offices)}>⬇ Export CSV</button>
+            <label style={{...S.btnOutline,cursor:"pointer",display:"inline-block"}}>
+              ⬆ Import
+              <input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={e=>{ if(e.target.files[0]) setModal({type:"import",file:e.target.files[0]}); e.target.value=""; }}/>
+            </label>
             <button style={S.btnPrimary} onClick={()=>setModal({type:"entry",data:blankEntry(me.officeId,me.name),editId:null})}>+ Add Entry</button>
           </div>
           <CostTable entries={sortedEntries} offices={offices} me={me}
@@ -316,7 +321,7 @@ export default function App() {
             {isAdmin && <button style={S.btnPrimary} onClick={()=>setModal({type:"office",data:blankOffice(),editId:null})}>+ New Office</button>}
           </div>
           <div style={S.cardGrid}>
-            {offices.map(o=>{
+            {[...offices].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
               const oUsers   = users.filter(u=>u.officeId===o.id);
               const oEntries = entries.filter(e=>e.officeId===o.id);
               const mgrs     = oUsers.filter(u=>u.role==="manager"||u.role==="admin");
@@ -394,6 +399,18 @@ export default function App() {
         </>}
       </div>
 
+      {modal?.type==="import" &&
+        <ImportModal file={modal.file} offices={offices} me={me}
+          onImport={async(rows)=>{ 
+            try {
+              const inserted = await Promise.all(rows.map(r=>db.post("entries",fromEntry(r,me.name))));
+              setEntries(p=>[...p,...inserted.map(r=>toEntry(r[0]))]);
+              showToast(`${rows.length} entr${rows.length!==1?"ies":"y"} imported.`);
+              closeModal();
+            } catch(e) { showToast("Import failed: "+e.message,"error"); }
+          }}
+          onClose={closeModal} />}
+
       {modal?.type==="entry" &&
         <EntryModal form={modal.data} editId={modal.editId} offices={offices} me={me} isAdmin={isAdmin}
           onSave={async (f,id)=>{ if(await saveEntry(f,id)) closeModal(); }} onClose={closeModal} />}
@@ -430,6 +447,7 @@ function LoadingScreen() {
 function LoginScreen({ users, onLogin }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
+  const [showPw,   setShowPw]   = useState(false);
   const [error,    setError]    = useState("");
   const submit = () => {
     const u=users.find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===password);
@@ -449,8 +467,14 @@ function LoginScreen({ users, onLogin }) {
           </div>
           <div style={S.field}>
             <label style={S.label}>Password</label>
-            <input style={S.input} type="password" value={password} onChange={e=>setPassword(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="••••••••"/>
+            <div style={{position:"relative"}}>
+              <input style={{...S.input,paddingRight:52}} type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="••••••••"/>
+              <button onClick={()=>setShowPw(p=>!p)}
+                style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#666",fontSize:13,fontFamily:"Georgia,serif"}}>
+                {showPw?"Hide":"Show"}
+              </button>
+            </div>
           </div>
           {error && <p style={S.loginError}>{error}</p>}
           <button style={{...S.btnPrimary,width:"100%",marginTop:4}} onClick={submit}>Sign In →</button>
@@ -489,10 +513,10 @@ function Topbar({ me, myOffice, isMgr, page, setPage, onLogout }) {
 function CostTable({ entries, offices, me, canEdit, onEdit, onView, sort, onSort }) {
   if (!entries.length) return <div style={S.empty}>No entries match your search.</div>;
   const cols = [
-    ["componentNo","Comp #"],["componentName","Component Name"],["state","State"],
-    ["city","City"],["zip","ZIP"],["unit","Unit"],
-    ["laborCost","Labor"],["materialCost","Material"],["totalCost","Total"],
-    ["officeId","Office"],["",""]
+    ["componentName","Component Name"],["state","State"],["city","City"],
+    ["zip","ZIP"],["quantity","Qty"],["unit","Unit"],
+    ["totalCost","Total Cost"],["unitCost","Unit Cost"],
+    ["officeId","Office"],["updatedAt","Date"],["",""]
   ];
   const SortHdr = ({col,label}) => (
     <th style={{...S.th,...(col?{cursor:"pointer",userSelect:"none"}:{})}}
@@ -513,20 +537,20 @@ function CostTable({ entries, offices, me, canEdit, onEdit, onView, sort, onSort
               <tr key={e.id} style={{...S.tr,background:own?"#fff":"#f9f9f7"}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=own?"#f0f7ff":"#f0efe9"}
                 onMouseLeave={ev=>ev.currentTarget.style.background=own?"#fff":"#f9f9f7"}>
-                <td style={{...S.td,fontWeight:600,color:"#1a4b8c",fontFamily:"monospace"}}>{e.componentNo}</td>
                 <td style={S.td}><button style={S.linkBtn} onClick={()=>onView(e)}>{e.componentName}</button></td>
                 <td style={S.tdCenter}>{e.state}</td>
                 <td style={S.td}>{e.city}</td>
                 <td style={S.tdCenter}>{e.zip}</td>
+                <td style={S.tdCenter}>{e.quantity||"—"}</td>
                 <td style={S.tdCenter}><span style={S.unitBadge}>{e.unit}</span></td>
-                <td style={S.tdRight}>{fmt(e.laborCost)}</td>
-                <td style={S.tdRight}>{fmt(e.materialCost)}</td>
                 <td style={{...S.tdRight,fontWeight:700,color:"#1a7a3c"}}>{fmt(e.totalCost)}</td>
+                <td style={S.tdRight}>{fmt(e.unitCost)}</td>
                 <td style={S.td}>
                   <span style={{...S.officePill,background:own?"#dbeafe":"#f3f0e8",color:own?"#1e40af":"#7a6a3a"}}>
                     {own?"●":"○"} {offices.find(o=>o.id===e.officeId)?.name.split("–")[0].trim()}
                   </span>
                 </td>
+                <td style={S.tdCenter}>{e.updatedAt||"—"}</td>
                 <td style={S.tdActions}>
                   {canEdit(e)?<button style={S.btnEdit} onClick={()=>onEdit(e)}>Edit</button>:<span style={S.viewOnly}>View only</span>}
                 </td>
@@ -562,14 +586,13 @@ function EntryModal({ form:init, editId, offices, me, isAdmin, onSave, onClose }
 
   const set=(k,v)=>setForm(p=>{
     const n={...p,[k]:v};
-    const l=parseFloat(n.laborCost)||0, m=parseFloat(n.materialCost)||0;
-    n.totalCost=(l+m).toFixed(2);
+    const t=parseFloat(n.totalCost), q=parseFloat(n.quantity);
+    n.unitCost = (t>0 && q>0) ? (t/q).toFixed(2) : "";
     return n;
   });
 
   const blurCost=(k)=>setForm(p=>({...p,[k]:fmtCurrency(p[k])}));
   const setZip=(v)=>{ if(/^\d{0,5}$/.test(v)) set("zip",v); };
-  const setCompNo=(v)=>{ if(/^[a-zA-Z0-9\-_ ]*$/.test(v)) set("componentNo",v); };
 
   const handleSave=async()=>{
     const e=validateEntry(form);
@@ -582,12 +605,7 @@ function EntryModal({ form:init, editId, offices, me, isAdmin, onSave, onClose }
   return (
     <Modal title={editId?"Edit Entry":"Add New Entry"} onClose={onClose} wide>
       <div style={S.formGrid}>
-        <div style={S.field}>
-          <label style={S.label}>Component #*</label>
-          <input style={{...S.input,...(errs.componentNo?S.inputErr:{})}} value={form.componentNo??""} onChange={e=>setCompNo(e.target.value)} placeholder="e.g. STR-001"/>
-          <ErrMsg field="componentNo"/>
-        </div>
-        <div style={{...S.field,gridColumn:"span 2"}}>
+        <div style={{...S.field,gridColumn:"span 3"}}>
           <label style={S.label}>Component Name*</label>
           <input style={{...S.input,...(errs.componentName?S.inputErr:{})}} value={form.componentName??""} onChange={e=>set("componentName",e.target.value)}/>
           <ErrMsg field="componentName"/>
@@ -630,19 +648,19 @@ function EntryModal({ form:init, editId, offices, me, isAdmin, onSave, onClose }
           </select>
         </div>
         <div style={S.field}>
-          <label style={S.label}>Labor Cost ($)</label>
-          <input style={{...S.input,...(errs.laborCost?S.inputErr:{})}} type="number" min="0" step="0.01" value={form.laborCost??""} onChange={e=>set("laborCost",e.target.value)} onBlur={()=>blurCost("laborCost")}/>
-          <ErrMsg field="laborCost"/>
+          <label style={S.label}>Quantity*</label>
+          <input style={{...S.input,...(errs.quantity?S.inputErr:{})}} type="number" min="1" step="1" max="999999" value={form.quantity??""} onChange={e=>{ const v=e.target.value; if(/^\d{0,6}$/.test(v)) set("quantity",v); }}/>
+          <ErrMsg field="quantity"/>
         </div>
         <div style={S.field}>
-          <label style={S.label}>Material Cost ($)</label>
-          <input style={{...S.input,...(errs.materialCost?S.inputErr:{})}} type="number" min="0" step="0.01" value={form.materialCost??""} onChange={e=>set("materialCost",e.target.value)} onBlur={()=>blurCost("materialCost")}/>
-          <ErrMsg field="materialCost"/>
+          <label style={S.label}>Total Cost ($)*</label>
+          <input style={{...S.input,...(errs.totalCost?S.inputErr:{})}} type="number" min="0" step="0.01" value={form.totalCost??""} onChange={e=>set("totalCost",e.target.value)} onBlur={()=>blurCost("totalCost")}/>
+          <ErrMsg field="totalCost"/>
         </div>
         <div style={S.field}>
-          <label style={S.label}>Total Installed Cost ($)</label>
-          <input style={{...S.input,background:"#f5f5f5",color:"#1a7a3c",fontWeight:700}} value={form.totalCost??""} readOnly/>
-          <span style={S.hint}>Auto-calculated (Labor + Material)</span>
+          <label style={S.label}>Unit Cost ($)</label>
+          <input style={{...S.input,background:"#f5f5f5",color:"#1a7a3c",fontWeight:700}} value={form.unitCost??""} readOnly/>
+          <span style={S.hint}>Auto-calculated (Total ÷ Qty)</span>
         </div>
         <div style={{...S.field,gridColumn:"1 / -1"}}>
           <label style={S.label}>Notes / Description</label>
@@ -661,23 +679,22 @@ function EntryModal({ form:init, editId, offices, me, isAdmin, onSave, onClose }
 function EntryDetailModal({ entry, offices, users, canEdit, onEdit, onDelete, onClose }) {
   const office  = offices.find(o=>o.id===entry.officeId);
   const rows=[
-    ["Component #",    entry.componentNo],
     ["Component Name", entry.componentName],
     ["Office",         office?.name],
     ["Country",        entry.country],
     ["State",          entry.state],
     ["City",           entry.city],
     ["ZIP",            entry.zip],
+    ["Quantity",       entry.quantity||"—"],
     ["Unit",           entry.unit],
-    ["Labor Cost",     fmt(entry.laborCost)],
-    ["Material Cost",  fmt(entry.materialCost)],
-    ["Total Installed",fmt(entry.totalCost),true],
+    ["Total Cost",     fmt(entry.totalCost),true],
+    ["Unit Cost",      fmt(entry.unitCost)],
     ["Notes",          entry.notes||"—",false,true],
     ["Submitted By",   entry.submittedBy||"—"],
-    ["Last Updated",   entry.updatedAt],
+    ["Date",           entry.updatedAt||"—"],
   ];
   return (
-    <Modal title={`${entry.componentNo} — ${entry.componentName}`} onClose={onClose} wide>
+    <Modal title={entry.componentName} onClose={onClose} wide>
       {!canEdit&&<div style={S.viewOnlyBanner}>👁 View Only — this entry belongs to another office</div>}
       <div style={S.detailGrid}>
         {rows.map(([label,value,big,full])=>(
@@ -787,6 +804,167 @@ function StatCard({ label, value }) {
 
 function Toast({ msg, type }) {
   return <div style={{...S.toast,background:type==="error"?"#dc2626":"#16a34a"}}>{msg}</div>;
+}
+
+
+// ── IMPORT MODAL ───────────────────────────────────────────────────────────────
+function ImportModal({ file, offices, me, onImport, onClose }) {
+  const [rows,    setRows]    = React.useState(null);
+  const [errors,  setErrors]  = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving,  setSaving]  = React.useState(false);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(()=>{
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    script.onload = () => parseFile(); // eslint-disable-line react-hooks/exhaustive-deps
+    document.head.appendChild(script);
+    return () => document.head.removeChild(script);
+  },[]);
+
+  const parseFile = () => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb   = window.XLSX.read(data, {type:"array"});
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const json = window.XLSX.utils.sheet_to_json(ws, {defval:""});
+        validateRows(json);
+      } catch(err) {
+        setErrors([`Failed to parse file: ${err.message}`]);
+        setLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const REQUIRED_COLS = ["Component Name","State","City","ZIP","Quantity","Unit","Total Cost"];
+  const OPTIONAL_COLS = ["Country","Notes"];
+  const validateRows = (json) => {
+    const errs = [];
+    const valid = [];
+
+    // Check headers
+    if (json.length === 0) { setErrors(["File is empty."]); setLoading(false); return; }
+    const headers = Object.keys(json[0]);
+    const missing = REQUIRED_COLS.filter(c=>!headers.includes(c));
+    if (missing.length > 0) {
+      setErrors([`Missing required columns: ${missing.join(", ")}. Required columns are: ${REQUIRED_COLS.join(", ")}`]);
+      setLoading(false);
+      return;
+    }
+
+    json.forEach((row, i) => {
+      const rowNum = i + 2;
+      const rowErrs = [];
+      if (!String(row["Component Name"]).trim()) rowErrs.push("Component Name is required");
+      if (!String(row["State"]).trim()) rowErrs.push("State is required");
+      else if (!US_STATES.includes(String(row["State"]).trim().toUpperCase())) rowErrs.push(`State "${row["State"]}" is not a valid US state`);
+      if (!String(row["City"]).trim()) rowErrs.push("City is required");
+      if (!String(row["ZIP"]).trim()) rowErrs.push("ZIP is required");
+      else if (!/^\d{5}$/.test(String(row["ZIP"]).trim())) rowErrs.push(`ZIP "${row["ZIP"]}" must be 5 digits`);
+      if (!String(row["Unit"]).trim()) rowErrs.push("Unit is required");
+      else if (!UNITS.includes(String(row["Unit"]).trim().toUpperCase())) rowErrs.push(`Unit "${row["Unit"]}" must be one of: ${UNITS.join(", ")}`);
+      if (!String(row["Total Cost"]).trim()) rowErrs.push("Total Cost is required");
+      else if (isNaN(parseFloat(row["Total Cost"]))) rowErrs.push(`Total Cost "${row["Total Cost"]}" must be a number`);
+      if (!String(row["Quantity"]).trim()) rowErrs.push("Quantity is required");
+      else if (!/^\d+$/.test(String(row["Quantity"]).trim())) rowErrs.push(`Quantity "${row["Quantity"]}" must be a whole number`);
+      else if (parseInt(row["Quantity"]) <= 0) rowErrs.push(`Quantity "${row["Quantity"]}" must be greater than zero`);
+      else if (String(parseInt(row["Quantity"])).length >= 7) rowErrs.push(`Quantity "${row["Quantity"]}" must be less than 7 digits`);
+
+      if (rowErrs.length > 0) {
+        rowErrs.forEach(e => errs.push(`Row ${rowNum}: ${e}`));
+      } else {
+        const qty = parseFloat(row["Quantity"])||0;
+        const tot = parseFloat(row["Total Cost"]);
+        valid.push({
+          componentName: String(row["Component Name"]).trim(),
+          country:       String(row["Country"]||"USA").trim()||"USA",
+          state:         String(row["State"]).trim().toUpperCase(),
+          city:          String(row["City"]).trim(),
+          zip:           String(row["ZIP"]).trim(),
+          quantity:      qty||"",
+          unit:          String(row["Unit"]).trim().toUpperCase(),
+          totalCost:     tot.toFixed(2),
+          unitCost:      (qty>0&&tot>0)?(tot/qty).toFixed(2):"",
+          notes:         String(row["Notes"]||"").trim(),
+          officeId:      me.officeId,
+        });
+      }
+    });
+
+    setErrors(errs);
+    setRows(errs.length===0 ? valid : null);
+    setLoading(false);
+  };
+
+  const TEMPLATE_COLS = [...REQUIRED_COLS,...OPTIONAL_COLS];
+
+  const downloadTemplate = () => {
+    const ws  = window.XLSX.utils.aoa_to_sheet([TEMPLATE_COLS]);
+    const wb  = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, "Cost Data");
+    window.XLSX.writeFile(wb, "ar-cost-import-template.xlsx");
+  };
+
+  return (
+    <Modal title="Import Cost Entries" onClose={onClose} wide>
+      {loading && <div style={{textAlign:"center",padding:24,color:"#666"}}>Parsing file…</div>}
+      {!loading && errors.length>0 && (
+        <div>
+          <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,padding:"12px 14px",marginBottom:16}}>
+            <div style={{fontWeight:700,color:"#991b1b",marginBottom:8}}>⚠ Import stopped — {errors.length} error{errors.length!==1?"s":""} found:</div>
+            <div style={{maxHeight:200,overflowY:"auto"}}>
+              {errors.map((e,i)=><div key={i} style={{fontSize:13,color:"#7f1d1d",padding:"2px 0",borderBottom:"1px solid #fecaca"}}>{e}</div>)}
+            </div>
+          </div>
+          <p style={{fontSize:13,color:"#666",margin:"0 0 16px"}}>Please fix the errors in your file and re-import. Download the template below for the correct format.</p>
+          <div style={S.formActions}>
+            <button style={S.btnOutline} onClick={downloadTemplate}>⬇ Download Template</button>
+            <button style={S.btnSecondary} onClick={onClose}>Close</button>
+          </div>
+        </div>
+      )}
+      {!loading && errors.length===0 && rows && (
+        <div>
+          <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:7,padding:"12px 14px",marginBottom:16}}>
+            <div style={{fontWeight:700,color:"#166534",marginBottom:4}}>✓ {rows.length} row{rows.length!==1?"s":""} ready to import</div>
+            <div style={{fontSize:13,color:"#166534"}}>All rows validated successfully. They will be assigned to: <strong>{offices.find(o=>o.id===me.officeId)?.name}</strong></div>
+          </div>
+          <div style={{...S.tableWrap,maxHeight:240,overflowY:"auto",marginBottom:16}}>
+            <table style={S.table}>
+              <thead><tr style={S.thead}>
+                {["Component Name","State","City","ZIP","Qty","Unit","Total Cost","Unit Cost"].map(h=><th key={h} style={S.th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {rows.map((r,i)=>(
+                  <tr key={i} style={S.tr}>
+                    <td style={S.td}>{r.componentName}</td>
+                    <td style={S.tdCenter}>{r.state}</td>
+                    <td style={S.td}>{r.city}</td>
+                    <td style={S.tdCenter}>{r.zip}</td>
+                    <td style={S.tdCenter}>{r.quantity||"—"}</td>
+                    <td style={S.tdCenter}><span style={S.unitBadge}>{r.unit}</span></td>
+                    <td style={S.tdRight}>{fmt(r.totalCost)}</td>
+                    <td style={S.tdRight}>{fmt(r.unitCost)||"—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={S.formActions}>
+            <button style={S.btnOutline} onClick={downloadTemplate}>⬇ Download Template</button>
+            <button style={S.btnSecondary} onClick={onClose}>Cancel</button>
+            <button style={{...S.btnPrimary,opacity:saving?0.6:1}} onClick={async()=>{setSaving(true);await onImport(rows);setSaving(false);}} disabled={saving}>
+              {saving?`Importing…`:`Import ${rows.length} Row${rows.length!==1?"s":""}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 }
 
 // ── STYLES ─────────────────────────────────────────────────────────────────────

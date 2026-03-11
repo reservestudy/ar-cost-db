@@ -824,6 +824,7 @@ function ImportModal({ file, offices, me, onImport, onClose }) {
     return () => { if(document.head.contains(script)) document.head.removeChild(script); };
   },[]);
 
+  // eslint-disable-next-line no-unused-vars
   const parseFile = () => {
     parseFileRef.current = parseFile;
     const reader = new FileReader();
